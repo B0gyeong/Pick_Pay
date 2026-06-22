@@ -67,4 +67,10 @@
         android:label="PaymentFragment"
         tools:layout="@layout/fragment_payment" />
 
+    <fragment
+        android:id="@+id/fragment_receipt"
+        android:name="com.ssafy.payclient.fragment.ReceiptFragment"
+        android:label="ReceiptFragment"
+        tools:layout="@layout/fragment_receipt" />
+
 </navigation>

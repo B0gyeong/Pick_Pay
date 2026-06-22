@@ -87,6 +87,14 @@
                 android:text="주문하기"
                 android:textColor="#FFFFFF"
                 android:textSize="17sp" />
+
+            <ProgressBar
+                android:id="@+id/progress_order"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

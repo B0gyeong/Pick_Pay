@@ -1,17 +1,14 @@
 package com.ssafy.payclient.fragment
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
-import com.ssafy.payclient.BuildConfig
 import com.ssafy.payclient.MainActivity
 import com.ssafy.payclient.R
 import com.ssafy.payclient.data.local.PersonalCartStore
@@ -19,10 +16,10 @@ import com.ssafy.payclient.data.local.TokenManager
 import com.ssafy.payclient.data.model.PaymentCompleteRequest
 import com.ssafy.payclient.data.network.RetrofitClient
 import com.ssafy.payclient.databinding.FragmentPaymentBinding
-import com.tosspayments.paymentsdk.TossPayments
+import com.tosspayments.paymentsdk.PaymentWidget
+import com.tosspayments.paymentsdk.model.PaymentCallback
 import com.tosspayments.paymentsdk.model.TossPaymentResult
-import com.tosspayments.paymentsdk.model.paymentinfo.TossPaymentInfo
-import com.tosspayments.paymentsdk.model.paymentinfo.TossPaymentMethod
+import com.tosspayments.paymentsdk.view.PaymentMethod
 import kotlinx.coroutines.launch
 
 class PaymentFragment : Fragment() {
@@ -30,16 +27,11 @@ class PaymentFragment : Fragment() {
     private var _binding: FragmentPaymentBinding? = null
     private val binding get() = _binding!!
 
-    private val tossPayments by lazy { TossPayments(BuildConfig.TOSS_CLIENT_KEY) }
-    private val paymentResultLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        handlePaymentResult(result.resultCode, result.data)
-    }
-
     private val orderId: String by lazy { requireArguments().getString(ARG_ORDER_ID).orEmpty() }
     private val orderName: String by lazy { requireArguments().getString(ARG_ORDER_NAME).orEmpty() }
     private val totalPrice: Long by lazy { requireArguments().getLong(ARG_TOTAL_PRICE) }
+
+    private lateinit var paymentWidget: PaymentWidget
     private var isPaymentCompleting = false
 
     override fun onCreateView(
@@ -57,7 +49,7 @@ class PaymentFragment : Fragment() {
         setupToolbar()
         setupPaymentInfo()
         setupClickListeners()
-        observePaymentDeepLink()
+        setupPaymentWidget()
     }
 
     private fun setupToolbar() {
@@ -67,8 +59,8 @@ class PaymentFragment : Fragment() {
     }
 
     private fun setupPaymentInfo() {
-        binding.tvPaymentAmount.text = "$totalPrice 원"
-        binding.btnPayment.isEnabled = true
+        binding.tvPaymentAmount.text = "$totalPrice KRW"
+        binding.btnPayment.isEnabled = false
     }
 
     private fun setupClickListeners() {
@@ -77,53 +69,57 @@ class PaymentFragment : Fragment() {
         }
     }
 
-    // 결제창 호출 ( Toss Payments SDK )
-    private fun requestPayment() {
-        val paymentInfo = TossPaymentInfo(
-            orderId = orderId,
-            orderName = orderName.ifBlank { "Individual order" },
-            amount = totalPrice
-        )
-        val paymentMethod = TossPaymentMethod.Card
+    private fun setupPaymentWidget() {
+        paymentWidget = (requireActivity() as MainActivity).paymentWidget
 
-        // 실제 결제 팝업 띄우기
-        tossPayments.requestPayment(
-            requireActivity(),
-            paymentMethod,
-            paymentInfo,
-            paymentResultLauncher // 결제 결과 콜백 함수
-        )
-    }
-
-    // 결제를 마치거나 취소해서 팝업이 닫힐때 콜백
-    private fun handlePaymentResult(resultCode: Int, data: Intent?) {
-        when (resultCode) {
-            TossPayments.RESULT_PAYMENT_SUCCESS -> {
-                val success = data?.getParcelableExtra(TossPayments.EXTRA_PAYMENT_RESULT_SUCCESS)
-                    as? TossPaymentResult.Success
-
-                if (success == null) {
-                    Toast.makeText(requireContext(), "결제 결과를 확인할 수 없습니다.", Toast.LENGTH_SHORT).show()
-                    return
-                }
-
-                completePayment(success)
-            }
-
-            TossPayments.RESULT_PAYMENT_FAILED -> {
-                val fail = data?.getParcelableExtra(TossPayments.EXTRA_PAYMENT_RESULT_FAILED)
-                    as? TossPaymentResult.Fail
-                Toast.makeText(
-                    requireContext(),
-                    fail?.errorMessage ?: "Payment failed.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            else -> Toast.makeText(
+        try {
+            paymentWidget.renderPaymentMethods(
+                binding.paymentMethod,
+                totalPrice
+            )
+            binding.btnPayment.isEnabled = true
+        } catch (e: Exception) {
+            Toast.makeText(
                 requireContext(),
-                "Payment was canceled.",
+                "Failed to render payment methods: ${e.message}",
                 Toast.LENGTH_SHORT
             ).show()
+        }
+    }
+
+    private fun requestPayment() {
+        if (isPaymentCompleting) return
+
+        try {
+            binding.btnPayment.isEnabled = false
+            binding.tvPaymentDescription.text = "Opening the payment window..."
+            paymentWidget.requestPayment(
+                PaymentMethod.PaymentInfo(
+                    orderId = orderId,
+                    orderName = orderName.ifBlank { "Individual order" }
+                ),
+                object : PaymentCallback {
+                    override fun onPaymentSuccess(success: TossPaymentResult.Success) {
+                        completePayment(success)
+                    }
+
+                    override fun onPaymentFailed(fail: TossPaymentResult.Fail) {
+                        Toast.makeText(
+                            requireContext(),
+                            fail.errorMessage ?: "Payment failed.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        resetPaymentButton()
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Toast.makeText(
+                requireContext(),
+                "Payment request error: ${e.message}",
+                Toast.LENGTH_SHORT
+            ).show()
+            resetPaymentButton()
         }
     }
 
@@ -131,7 +127,7 @@ class PaymentFragment : Fragment() {
         completePayment(
             paymentKey = success.paymentKey,
             approvedOrderId = success.orderId,
-            amount = totalPrice
+            amount = success.amount.toLong()
         )
     }
 
@@ -139,6 +135,8 @@ class PaymentFragment : Fragment() {
         if (isPaymentCompleting) return
         isPaymentCompleting = true
         binding.btnPayment.isEnabled = false
+        binding.progressPayment.visibility = View.VISIBLE
+        binding.tvPaymentDescription.text = "Approving your payment securely..."
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -153,64 +151,51 @@ class PaymentFragment : Fragment() {
 
                 if (response.isSuccessful) {
                     val body = response.body()
+                    val receiptOrderId = body?.orderId ?: approvedOrderId
                     PersonalCartStore.clear()
                     Toast.makeText(
                         requireContext(),
-                        body?.message ?: "결제가 완료되었습니다.",
+                        body?.message ?: "Payment completed.",
                         Toast.LENGTH_SHORT
                     ).show()
-                    findNavController().popBackStack(R.id.fragment_order, false)
+                    navigateToReceipt(receiptOrderId)
                 } else {
                     Toast.makeText(
                         requireContext(),
-                        "결제 승인에 실패했습니다. (${response.code()})",
+                        "Payment approval failed. (${response.code()})",
                         Toast.LENGTH_SHORT
                     ).show()
-                    isPaymentCompleting = false
-                    _binding?.btnPayment?.isEnabled = true
+                    resetPaymentButton()
                 }
             } catch (e: Exception) {
                 Toast.makeText(
                     requireContext(),
-                    "결제 승인 중 오류가 발생했습니다: ${e.message}",
+                    "Payment approval error: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
-                isPaymentCompleting = false
-                _binding?.btnPayment?.isEnabled = true
+                resetPaymentButton()
             }
         }
     }
 
-    private fun observePaymentDeepLink() {
-        val savedStateHandle = findNavController().currentBackStackEntry?.savedStateHandle ?: return
-        savedStateHandle.getLiveData<String>(MainActivity.PAYMENT_DEEP_LINK_URI)
-            .observe(viewLifecycleOwner) { uriString ->
-                savedStateHandle.remove<String>(MainActivity.PAYMENT_DEEP_LINK_URI)
-                handlePaymentDeepLink(Uri.parse(uriString))
-            }
+    private fun resetPaymentButton() {
+        isPaymentCompleting = false
+        _binding?.btnPayment?.isEnabled = true
+        _binding?.progressPayment?.visibility = View.GONE
+        _binding?.tvPaymentDescription?.text = "Select a payment method, then press Pay."
     }
 
-    private fun handlePaymentDeepLink(uri: Uri) {
-        when (uri.path) {
-            "/success" -> {
-                val paymentKey = uri.getQueryParameter("paymentKey").orEmpty()
-                val approvedOrderId = uri.getQueryParameter("orderId").orEmpty()
-                val amount = uri.getQueryParameter("amount")?.toLongOrNull() ?: totalPrice
-
-                if (paymentKey.isBlank() || approvedOrderId.isBlank()) {
-                    Toast.makeText(requireContext(), "결제 승인 정보를 확인할 수 없습니다.", Toast.LENGTH_SHORT).show()
-                    _binding?.btnPayment?.isEnabled = true
-                    return
-                }
-
-                completePayment(paymentKey, approvedOrderId, amount)
-            }
-            "/fail" -> {
-                val message = uri.getQueryParameter("message") ?: "결제에 실패했습니다."
-                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
-                _binding?.btnPayment?.isEnabled = true
-            }
-        }
+    private fun navigateToReceipt(receiptOrderId: String) {
+        val navOptions = NavOptions.Builder()
+            .setPopUpTo(R.id.fragment_home, false)
+            .build()
+        findNavController().navigate(
+            R.id.fragment_receipt,
+            Bundle().apply {
+                putString(ReceiptFragment.ARG_ORDER_ID, receiptOrderId)
+            },
+            navOptions
+        )
     }
 
     override fun onResume() {

@@ -18,11 +18,15 @@ import com.ssafy.payclient.databinding.ActivityMainBinding
 import com.ssafy.payclient.ui.login.LoginActivity
 import com.ssafy.payclient.util.UiState
 import com.ssafy.payclient.util.ViewModelFactory
+import com.tosspayments.paymentsdk.PaymentWidget
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    lateinit var paymentWidget: PaymentWidget
+        private set
+
     private val viewModel: MainViewModel by viewModels {
         val tokenManager = TokenManager(applicationContext)
         val apiService = RetrofitClient.getApiService(tokenManager)
@@ -32,6 +36,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        paymentWidget = PaymentWidget(
+            this,
+            BuildConfig.TOSS_CLIENT_KEY,
+            "pickpay-customer"
+        )
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -69,9 +78,16 @@ class MainActivity : AppCompatActivity() {
 
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
         val navController = navHostFragment?.navController ?: return
-        navController.currentBackStackEntry
-            ?.savedStateHandle
-            ?.set(PAYMENT_DEEP_LINK_URI, uri.toString())
+
+        try {
+            navController.getBackStackEntry(R.id.fragment_payment)
+                .savedStateHandle
+                .set(PAYMENT_DEEP_LINK_URI, uri.toString())
+        } catch (e: IllegalArgumentException) {
+            navController.currentBackStackEntry
+                ?.savedStateHandle
+                ?.set(PAYMENT_DEEP_LINK_URI, uri.toString())
+        }
     }
 
 //    private fun observeViewModel() {

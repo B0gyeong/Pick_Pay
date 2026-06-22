@@ -18,9 +18,9 @@ class CartAdapter(
 
         fun bind(item: PersonalCartItem) {
             binding.tvCartMenuName.text = item.menuName
-            binding.tvCartMenuPrice.text = "${item.price} 원"
+            binding.tvCartMenuPrice.text = "${item.price} KRW"
             binding.tvCartQuantity.text = item.quantity.toString()
-            binding.tvCartItemTotal.text = "${item.price * item.quantity} 원"
+            binding.tvCartItemTotal.text = "${item.price * item.quantity} KRW"
 
             binding.btnIncrease.setOnClickListener {
                 onIncreaseClick(item)

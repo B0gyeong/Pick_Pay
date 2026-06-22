@@ -15,10 +15,10 @@ data class IndividualOrderCreateResponseDTO(
     val status: String
 )
 
-data class IndividualReceiptResponseDTO(
-    val orderId: Long,
+data class IndividualOrderReceiptResponseDTO(
+    val orderId: String,
     val totalPrice: Long,
     val status: String,
-    val orderedAt: String,
+    val createdAt: String,
     val items: List<OrderItemDTO>
 )

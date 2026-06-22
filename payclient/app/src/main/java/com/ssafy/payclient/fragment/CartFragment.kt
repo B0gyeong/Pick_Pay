@@ -83,11 +83,12 @@ class CartFragment : Fragment() {
     private fun createOrder() {
         val cartItems = PersonalCartStore.getItems()
         if (cartItems.isEmpty()) {
-            Toast.makeText(requireContext(), "장바구니가 비었습니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Cart is empty.", Toast.LENGTH_SHORT).show()
             return
         }
 
         binding.btnOrder.isEnabled = false
+        binding.progressOrder.visibility = View.VISIBLE
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -106,11 +107,10 @@ class CartFragment : Fragment() {
                 if (response.isSuccessful) {
                     val order = response.body()
                     if (order == null) {
-                        Toast.makeText(requireContext(), "주문 응답이 비어 있습니다.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(), "Order response is empty.", Toast.LENGTH_SHORT).show()
                         return@launch
                     }
 
-                    // navigate -> 결제 화면으로 이동
                     findNavController().navigate(
                         R.id.action_fragment_cart_to_fragment_payment,
                         Bundle().apply {
@@ -120,19 +120,20 @@ class CartFragment : Fragment() {
                         }
                     )
                 } else {
-                    Toast.makeText(requireContext(), "주문 생성에 실패했습니다. (${response.code()})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Failed to create order. (${response.code()})", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "주문 생성 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Order creation error: ${e.message}", Toast.LENGTH_SHORT).show()
             } finally {
                 _binding?.btnOrder?.isEnabled = PersonalCartStore.getItems().isNotEmpty()
+                _binding?.progressOrder?.visibility = View.GONE
             }
         }
     }
 
     private fun buildOrderName(items: List<PersonalCartItem>): String {
-        val firstItemName = items.firstOrNull()?.menuName ?: "주문"
-        return if (items.size == 1) firstItemName else "$firstItemName 외 ${items.size - 1}건"
+        val firstItemName = items.firstOrNull()?.menuName ?: "Order"
+        return if (items.size == 1) firstItemName else "$firstItemName and ${items.size - 1} more"
     }
 
     private fun renderCart() {
@@ -143,7 +144,7 @@ class CartFragment : Fragment() {
         binding.tvEmptyCart.visibility = if (isEmpty) View.VISIBLE else View.GONE
         binding.rvCartItems.visibility = if (isEmpty) View.GONE else View.VISIBLE
         binding.btnOrder.isEnabled = !isEmpty
-        binding.tvTotalPrice.text = "${PersonalCartStore.getTotalPrice()} 원"
+        binding.tvTotalPrice.text = "${PersonalCartStore.getTotalPrice()} KRW"
     }
 
     override fun onResume() {
